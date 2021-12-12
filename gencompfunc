@@ -1,0 +1,5 @@
+#!/bin/bash
+while IFS= read -r line; do 
+  [[ $line =~ ^tag ]] || continue
+  printf 'x.%s() { x.config %s "$@";}\n' "$line" "$line"
+done < <(./iam config keys)
