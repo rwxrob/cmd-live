@@ -213,21 +213,19 @@ HELP[title]='
 '"$EXE"'
 ```
 
-Print the current emoji, status, and flags on a single line suitable for
-pasting into the Twitch Stream Info > Title field. The name of the mode
-is not printed since often a gerund would be better than the simple mode
-name. Add the gerund version of the mode to the status if desired. The
+Print the current emoji, mode, status, and flags on a single line
+suitable for pasting into the Twitch Stream Info > Title field.  The
 commas of the flags will be replaced with bars (|) and wrapped with
-square brackets.
-'
+square brackets.'
 
 x.title() {
   local flags="$(x.flags)"
   flags=${flags//,/|}
-  printf "%s  %s %s\n" \
+  printf "%s  %s %s [%s]\n" \
     "$(x.emoji)" \
+    "$(x.mode)" \
     "$(x.status)" \
-    "[$flags]"
+    "$flags"
 }
 
 ############################## BOILERPLATE ###########################
