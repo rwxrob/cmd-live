@@ -1,5 +1,6 @@
 #!/bin/bash
 # shellcheck disable=SC2016
+# https://github.com/rwxrob/template-bash-command.
 set -e
 
 (( BASH_VERSINFO[0] < 4 )) && echo "Bash 4+ required." && exit 1
@@ -14,10 +15,24 @@ declare -A CONF
 
 _initialize() {
   : "${CONF[current]:=away}"
+  COMMANDS+=($(x.list.modes))
 }
 
 _alternatives() {
-  [[ $CMD = name ]] && x.mode "$@"
+
+  if [[ -z "$CMD" ]];then
+    x.title "$@"
+    return $?
+  fi
+
+  local modecmds=$(x.list.modes)
+  modecmds=${modecmds// /|}
+  [[ $CMD == name ]] && CMD=mode
+  if [[ $CMD =~ ^$modecmds$ ]]; then
+    x.mode "$CMD"
+    return $?
+  fi
+
 }
 
 HELP[main]='
@@ -53,9 +68,12 @@ Copyright 2021 Rob Muhlestein <rob@rwx.gg>
 Released under Apache-2.0 License  
 Please mention rwxrob.tv'
 
-HELP[list]='List available modes.'
 
-x.list () {
+# ------------------------------- modes ------------------------------
+
+HELP[list.modes]='List available modes.'
+
+x.list.modes () {
   local -a modes
   local mode line
   while IFS= read -r line; do
@@ -112,7 +130,7 @@ List all titles in alphabetical order by mode name.'
 
 x.titles() {
   local cur="$(x.mode)"
-  for i in $(x.list); do
+  for i in $(x.list.modes); do
     x.mode "$i"
     x.title
   done
@@ -205,6 +223,44 @@ x.tags() {
   x.config "mode.$cur.tags" "$new"
 }
 
+# ---------------------------- list.flags ----------------------------
+
+x.list.flags() {
+  local -a flags
+  local mode line
+  while IFS= read -r line; do
+    if [[ $line =~ ^flag.([a-z]+) ]]; then
+      flags+=(${BASH_REMATCH[1]})
+    fi
+  done < <(x.config keys);
+  echo $(printf "%s\n" "${flags[@]}" | sort)
+}
+
+# ------------------------- list.flats.emojis ------------------------
+
+x.flags.emojis() {
+  local -a flags
+  mapfile -d, -t flags < <(x.flags)
+  while IFS= read -r line; do
+    printf "%s " "$(x.config flag."$line")"
+  done < <(printf "%s\n" "${flags[@]}")
+}
+
+# ------------------------- list.flags.emojis ------------------------
+
+x.list.flags.emojis() {
+  local -a flags
+  local mode line
+  while IFS= read -r line; do
+    if [[ $line =~ ^flag.([a-z]+) ]]; then
+      flags+=(${BASH_REMATCH[1]})
+    fi
+  done < <(x.config keys);
+  while IFS= read -r line; do
+    printf "%s  %s\n" "$(x.config flag."$line")" "$line"
+  done < <(printf "%s\n" "${flags[@]}" | sort)
+}
+
 # ------------------------------- title ------------------------------
 
 HELP[title]='
@@ -219,18 +275,14 @@ commas of the flags will be replaced with bars (|) and wrapped with
 square brackets.'
 
 x.title() {
-  local flags="$(x.flags)"
-  flags=${flags//,/|}
-  printf "%s  %s %s [%s]\n" \
+  local mode=$(x.mode)
+  printf "%s  %s %s %s\n" \
     "$(x.emoji)" \
-    "$(x.mode)" \
+    "${mode^}" \
     "$(x.status)" \
-    "$flags"
+    "$(x.flags.emojis)"
 }
 
-############################## BOILERPLATE ###########################
-## Everything from here to the end of file can be snipped and updated
-## with latest from https://github.com/rwxrob/template-bash-command.
 
 # -------------------------- utility command -------------------------
 
@@ -328,6 +380,7 @@ x.readme() {
 
 # x.json() { _jsonstr "$@"; }
 # x.urlencode() { _urlencode "$@"; }
+
 
 # -------------------------- config command --------------------------
 
@@ -549,6 +602,9 @@ _buffer() {
 # --------------------- completion and delegation --------------------
 #      `complete -C foo foo` > `source <(foo bloated_completion)`
 
+_config_read
+_have _initialize && _initialize "$@"
+
 while IFS= read -r line; do
   [[ $line =~ ^declare\ -f\ x\. ]] || continue
   COMMANDS+=( "${line##declare -f x.}" )
@@ -564,9 +620,6 @@ if [[ -n $COMP_LINE ]]; then
   exit
 fi
 
-_config_read
-_have _initialize && _initialize "$@"
-
 for c in "${COMMANDS[@]}"; do
   if [[ $c == "$EXE" ]]; then
     "x.$EXE" "$@"
@@ -577,7 +630,8 @@ done
 if [[ -n "$1" ]]; then
   declare CMD="$1"; shift
   for c in "${COMMANDS[@]}"; do
-    if [[ $c == "$CMD" ]]; then
+    declare cmd=$(command -v "x.$c")
+    if [[ $c == "$CMD" && -n "$cmd" ]]; then
       "x.$CMD" "$@"
       exit $?
     fi
