@@ -2,6 +2,7 @@
 # shellcheck disable=SC2016
 # https://github.com/rwxrob/template-bash-command.
 set -e
+#set -x
 
 (( BASH_VERSINFO[0] < 4 )) && echo "Bash 4+ required." && exit 1
 
@@ -13,9 +14,23 @@ set -e
 declare -A HELP
 declare -A CONF
 
+declare black="\e[30m"
+declare red="\e[31m"
+declare green="\e[32m"
+declare yellow="\e[33m"
+declare blue="\e[34m"
+declare magenta="\e[35m"
+declare cyan="\e[36m"
+declare white="\e[37m"
+declare reset="\e[0m"
+
+declare -a colors=($black $red $green $yellow $blue $magenta $cyan $white)
+
 _initialize() {
   : "${CONF[current]:=away}"
+  : "${CONF[maxstatus]:=32}"
   COMMANDS+=($(x.list.modes))
+  COMMANDS+=(name emojis titles)
 }
 
 _alternatives() {
@@ -27,9 +42,23 @@ _alternatives() {
 
   local modecmds=$(x.list.modes)
   modecmds=${modecmds// /|}
-  [[ $CMD == name ]] && CMD=mode
   if [[ $CMD =~ ^$modecmds$ ]]; then
     x.mode "$CMD"
+    return $?
+  fi
+
+  if [[ $CMD == name ]]; then
+    x.mode "$@"
+    return $?
+  fi
+
+  if [[ $CMD == titles ]]; then
+    x.list.titles
+    return $?
+  fi
+
+  if [[ $CMD == emojis ]]; then
+    x.list.emojis
     return $?
   fi
 
@@ -38,11 +67,11 @@ _alternatives() {
 HELP[main]='
 # Live Streaming Mode and Status Update Utility
 
-This bash script helps Twitch live streamers using the command line to
-keep their communities informed about what is happening on the stream in
-real time by communicating the change in status (called a "mode") via
-several methods (depending on what is detected and supported on the
-current system):
+This bash script helps Twitch live streamers use the command line to
+keep their communities informed about what is happening on their stream in
+real time by communicating the change in status using profiles for their
+current "mode". It can also send notifications using other methods
+(depending on what is detected and supported on the current system):
 
 * Twitch Title
 * Twitch Category
@@ -62,14 +91,19 @@ Optional:
 
 * `pandoc` - for rich help docs
 
+## Security
+
+This script is expected to be installed for a specific user and only
+ever run by that user. No additional security vetting for running as an
+untrusted user has been done.
+
 ## Legal
 
 Copyright 2021 Rob Muhlestein <rob@rwx.gg>  
 Released under Apache-2.0 License  
 Please mention rwxrob.tv'
 
-
-# ------------------------------- modes ------------------------------
+# ---------------------------- list.modes ----------------------------
 
 HELP[list.modes]='List available modes.'
 
@@ -83,7 +117,15 @@ x.list.modes () {
       modes+=($mode)
     fi
   done < <(x.config keys);
-  echo $(printf "%s\n" "${modes[@]}" | sort)
+  if [[ -t 1 ]]; then
+    for mode in $(printf "%s\n" "${modes[@]}" | sort ); do
+      echo -en "${colors[((RANDOM%8))]}$mode$reset "
+    done
+  else
+    mapfile -t buf < <(printf "%s\n" "${modes[@]}" | sort)
+    echo "${buf[@]}"
+  fi
+  echo
 }
 
 # ------------------------------- mode -------------------------------
@@ -101,7 +143,7 @@ x.mode() { x.config current "$@";}
 
 # ------------------------------- emoji ------------------------------
 
-HELP[title]='
+HELP[emoji]='
 
 ```
 '"$EXE"' [NEW]
@@ -118,9 +160,9 @@ x.emoji() {
   x.config "mode.$cur.emoji" "$new"
 }
 
-# ------------------------------ titles ------------------------------
+# ---------------------------- list.titles ---------------------------
 
-HELP[titles]='
+HELP[list.titles]='
 
 ```
 '"$EXE"'
@@ -128,12 +170,42 @@ HELP[titles]='
 
 List all titles in alphabetical order by mode name.'
 
-x.titles() {
+x.list.titles() {
   local cur="$(x.mode)"
   for i in $(x.list.modes); do
     x.mode "$i"
-    x.title
+    printf "%s\n" "$(x.title)"
   done
+  x.mode "$cur"
+}
+
+# --------------------------- titles.modes ---------------------------
+
+HELP[titles.modes]='
+
+```
+'"$EXE"'
+```
+
+List all titles in alphabetical order by mode name and show mode.'
+
+x.titles.modes() {
+  local cur="$(x.mode)"
+  for i in $(x.list.modes); do
+    x.mode "$i"
+    printf "%s [%s]\n" "$(x.title)" "$i"
+  done
+  x.mode "$cur"
+}
+
+# ----------------------- _check_status_length -----------------------
+
+_check_status_length() {
+  local max="$(x.config maxstatus)"
+  local new="$1"
+  if (( ${#new} > max )); then
+    printf "WARNING: status is longer than %s\n" "$max"
+  fi
 }
 
 # ------------------------------ status ------------------------------
@@ -144,37 +216,57 @@ HELP[status]='
 '"$EXE"' [NEW]
 ```
 
-Print or change the current mode status.
-'
+Print or change the current status (overrides status.default for current
+mode).  '
 
 x.status() {
-  local cur="$(x.mode)" new="$*"
+  local  new="$*" cur="$(x.mode)"
   if [[ -z "$new" ]]; then
-    x.config "mode.$cur.status"
+    local status="$(x.config "mode.$cur.status")"
+    if [[ -z "$status" ]]; then
+      x.status.default
+      return $?
+    fi
+    echo "$status"
     return $?
   fi
+  _check_status_length "$new"
   x.config "mode.$cur.status" "$new"
 }
 
-# ------------------------------- flags ------------------------------
+# --------------------------- status.clear ---------------------------
 
-HELP[flags]='
+HELP[status.clear]='
+
+```
+'"$EXE"'
+```
+
+Clears the current status (switching to status.default).'
+
+x.status.clear() {
+  local cur="$(x.mode)"
+  x.config delete "mode.$cur.status"
+}
+
+# -------------------------- status.default --------------------------
+
+HELP[status.default]='
 
 ```
 '"$EXE"' [NEW]
 ```
 
-Print or change the current mode flags. If more than one flag, each must
-be separated by a single comma (no whitespace), for example: `cam,mic`.
+Print or change the current mode status default. (See status also.)
 '
 
-x.flags() {
+x.status.default() {
   local cur="$(x.mode)" new="$*"
   if [[ -z "$new" ]]; then
-    x.config "mode.$cur.flags"
+    x.config "mode.$cur.status.default"
     return $?
   fi
-  x.config "mode.$cur.flags" "$new"
+  x.config "mode.$cur.status.default" "$new"
 }
 
 # ----------------------------- category -----------------------------
@@ -202,6 +294,57 @@ x.category() {
   x.config "mode.$cur.category" "$new"
 }
 
+# -------------------------- list.categories -------------------------
+
+HELP[list.categories]='List available categories.'
+
+x.list.categories () {
+  local -A ids
+  local line id name
+  while IFS= read -r line; do
+    if [[ $line =~ ^cat ]]; then
+      id=${line##*.}
+      name=$(x.config "cat.$id")
+      ids["$name"]=$id
+    fi
+  done < <(x.config keys);
+  while IFS= read -r name; do
+    printf "$white%10s$reset $blue%s$reset\n" "${ids[$name]}" "$name"
+  done < <(printf "%s\n" "${!ids[@]}" | sort)
+}
+
+# ----------------------------- list.tags ----------------------------
+
+HELP[list.tags]='List available tags.'
+
+x.list.tags () {
+  local -a tags
+  local line tag
+  while IFS= read -r line; do
+    if [[ $line =~ ^tag ]]; then
+      tags+=(${line##*.})
+    fi
+  done < <(x.config keys);
+  while IFS= read -r tag; do
+    echo -ne "${colors[((RANDOM%8))]}$tag$reset "
+  done < <(printf "%s\n" "${tags[@]}" | sort)
+  echo
+}
+
+# ---------------------------- list.emojis ---------------------------
+
+HELP[list.emojis]='List emojis from all modes'
+
+x.list.emojis () {
+  local line
+  while IFS= read -r line; do
+    if [[ $line =~ .emoji= ]]; then
+      echo -n "${line##*=}  "
+    fi
+  done < "$(x.config path)";
+  echo
+}
+
 # ------------------------------- tags -------------------------------
 
 HELP[tags]='
@@ -223,44 +366,6 @@ x.tags() {
   x.config "mode.$cur.tags" "$new"
 }
 
-# ---------------------------- list.flags ----------------------------
-
-x.list.flags() {
-  local -a flags
-  local mode line
-  while IFS= read -r line; do
-    if [[ $line =~ ^flag.([a-z]+) ]]; then
-      flags+=(${BASH_REMATCH[1]})
-    fi
-  done < <(x.config keys);
-  echo $(printf "%s\n" "${flags[@]}" | sort)
-}
-
-# ------------------------- list.flats.emojis ------------------------
-
-x.flags.emojis() {
-  local -a flags
-  mapfile -d, -t flags < <(x.flags)
-  while IFS= read -r line; do
-    printf "%s " "$(x.config flag."$line")"
-  done < <(printf "%s\n" "${flags[@]}")
-}
-
-# ------------------------- list.flags.emojis ------------------------
-
-x.list.flags.emojis() {
-  local -a flags
-  local mode line
-  while IFS= read -r line; do
-    if [[ $line =~ ^flag.([a-z]+) ]]; then
-      flags+=(${BASH_REMATCH[1]})
-    fi
-  done < <(x.config keys);
-  while IFS= read -r line; do
-    printf "%s  %s\n" "$(x.config flag."$line")" "$line"
-  done < <(printf "%s\n" "${flags[@]}" | sort)
-}
-
 # ------------------------------- title ------------------------------
 
 HELP[title]='
@@ -272,17 +377,38 @@ HELP[title]='
 Print the current emoji, mode, status, and flags on a single line
 suitable for pasting into the Twitch Stream Info > Title field.  The
 commas of the flags will be replaced with bars (|) and wrapped with
-square brackets.'
+square brackets. Will use either the current status or the
+default.status for the current mode if not set.'
 
 x.title() {
-  local mode=$(x.mode)
-  printf "%s  %s %s %s\n" \
+  local status=$(x.status)
+  printf "%s %s\n" \
     "$(x.emoji)" \
-    "${mode^}" \
-    "$(x.status)" \
-    "$(x.flags.emojis)"
+    "$status"
 }
 
+# ------------------------------ delete ------------------------------
+
+HELP[delete]='
+
+```
+'"$EXE"' MODE
+```
+
+Delete all data for a specific. WARNING: Does not ask for confirmation.
+'
+
+x.delete() {
+  local cur="$1"
+  [[ -z "$cur" ]] && echo "Must specify mode to delete" && return 1
+  x.config delete "mode.$cur.emoji"
+  x.config delete "mode.$cur.name"
+  x.config delete "mode.$cur.status"
+  x.config delete "mode.$cur.status.default"
+  x.config delete "mode.$cur.flags"
+  x.config delete "mode.$cur.category"
+  echo "Deleted $cur"
+}
 
 # -------------------------- utility command -------------------------
 
@@ -493,12 +619,14 @@ _config_dir() {
   [[ -n "$1" ]] && echo "$dir/$1" && return 0
   printf "%s" "$dir"
   [[ -t 1 ]] && echo
+  return 0
 }
 
 _config_path() { 
   local file=${1:-values}
   printf "%s/%s" "$(_config_dir)" "$file"
   [[ -t 1 ]] && echo
+  return 0
 }
 
 _config_set() {
@@ -509,8 +637,9 @@ _config_set() {
 }
 
 _config_get() { 
-  printf "${CONF[$1]}"
+  printf "%s" "${CONF[$1]}"
   [[ -t 1 ]] && echo
+  return 0
 }
 
 _config_read() {
@@ -570,7 +699,7 @@ _reduce() {
 
 _newest() {
   IFS=$'\n'
-  local -a f=($(ls -1 --color=never -trd ${1:-.}/* 2>/dev/null))
+  mapfile -t f < <(ls -1 --color=never -trd "${1:-.}"/* 2>/dev/null)
   [[ ${#f} > 0 ]] && echo "${f[-1]}"
 }
 
