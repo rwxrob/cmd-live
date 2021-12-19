@@ -44,6 +44,7 @@ _alternatives() {
   modecmds=${modecmds// /|}
   if [[ $CMD =~ ^$modecmds$ ]]; then
     x.mode "$CMD"
+    x.title
     return $?
   fi
 
