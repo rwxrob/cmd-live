@@ -443,8 +443,13 @@ HELP[mode]='
 '"$EXE"' mode [NEW]
 ```
 
-Print the current mode name (from local cache) or set to a new one. Note
-that this does not fetch the current remote Twitch status'
+Print the current mode name (from local cache) or set to a new one and
+update it on Twitch as well. Note that this does not fetch the current
+remote Twitch status so it is possible that if Twitch stream info and
+tags have been set some other way that the local cache will be out of
+sync. A quick check of the current title should help identify when this
+happens, but it is inconsequential since usually a new mode is wanted
+anyway.'
 
 x.mode() {
   local new="$*" title category
