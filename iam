@@ -1,6 +1,5 @@
 #!/bin/bash
 # shellcheck disable=SC2016
-# https://github.com/rwxrob/template-bash-command.
 set -e
 #set -x
 
@@ -10,28 +9,104 @@ set -e
 : "${EDITOR:=vi}"
 : "${HELP_BROWSER:=}"
 : "${EXE:="${0##*/}"}"
+: "${LOCALE:="${LANG%%.*}"}"
+LOCALE=${LOCALE,,}
+LOCALE=${LOCALE//_/-}
 
 declare -A HELP
 declare -A CONF
 
-declare black="\e[30m"
-declare red="\e[31m"
-declare green="\e[32m"
-declare yellow="\e[33m"
-declare blue="\e[34m"
-declare magenta="\e[35m"
-declare cyan="\e[36m"
-declare white="\e[37m"
-declare reset="\e[0m"
+# -------------------------- main help text --------------------------
+
+HELP[main]='
+# Twitch Streamer Mode Update Utility
+
+This bash script helps Twitch live streamers communicate the current
+state of their stream quickly from the Linux command line by creating
+and changing a number of streaming *modes* which are stored in a simple
+configuration file. Streamers can also optionally post a corresponding
+Twitch chat message, GitHub status, and/or Twitter update. This script
+can also be used to post markers in the current live stream to help with
+video editing later, lookup user information, ban and timeout users,
+list the top channels in a given category, and more.
+
+Each mode has the following properties which can be easily set and get
+using the `config` commands:
+
+* Name
+* Emoji
+* Default Status
+* Current Status
+* Category
+* Tags
+
+Each is added using either the `config.set` or `config.edit` commands.
+The `set` command sets it directly from the command line. The `edit`
+command opens the configuration `values` file using your configured
+default `$EDITOR`.
+
+**Name** is a memorable name uniquely identifying the mode.  Names may
+contain dots (.) to separate modes into submodes easily (`playing.dota2`,
+`playing.witcher3`, `out.cycling`, `out.watching.birds`,
+`out.watching.movie`). This makes for quick and organized tab completion
+later.
+
+## Dependencies
+
+Required:
+
+* Bash 4+
+* `jq` - JSON Parsing
+* `twitch` - Official Twitch Command Line Utility
+
+Optional:
+
+* `gh` - GitHub Status Updates
+* `twurl` - Twitter Posts
+* `pandoc` - Rich Help Docs
+
+## Security
+
+This script is expected to be installed for a specific user and only
+ever run by that user. No additional security vetting for running as an
+untrusted user has been done.
+
+## Legal
+
+Copyright 2021 Rob Muhlestein <rob@rwx.gg>  
+Released under Apache-2.0 License  
+Please mention rwxrob.tv for attribution'
+
+# ---------------------- universal curses colors ---------------------
+
+declare black=$'\e[30m'
+declare red=$'\e[31m'
+declare green=$'\e[32m'
+declare yellow=$'\e[33m'
+declare blue=$'\e[34m'
+declare magenta=$'\e[35m'
+declare cyan=$'\e[36m'
+declare white=$'\e[37m'
+declare reset=$'\e[0m'
 
 declare -a colors=($black $red $green $yellow $blue $magenta $cyan $white)
 
+# ---------------------------- initialize ----------------------------
+
 _initialize() {
   : "${CONF[current]:=away}"
+  : "${CONF[twitch.default.category]:=509670}"
   : "${CONF[maxstatus]:=32}"
   COMMANDS+=($(x.list.modes))
-  COMMANDS+=(name emojis titles)
+  COMMANDS+=(name names modes emojis titles titles.modes 
+    categories id name channel user twitch.id twitch.name
+    twitch.channel twitch.user twitch.default.category)
+  HELP[modes]=${HELP[list.modes]}
+  HELP[titles]=${HELP[list.titles]}
+  HELP[emojis]=${HELP[list.emojis]}
 }
+
+# --------------------------- alternatives ---------------------------
 
 _alternatives() {
 
@@ -48,8 +123,8 @@ _alternatives() {
     return $?
   fi
 
-  if [[ $CMD == name ]]; then
-    x.mode "$@"
+  if [[ $CMD == modes ]]; then
+    x.list.modes "$@"
     return $?
   fi
 
@@ -58,66 +133,297 @@ _alternatives() {
     return $?
   fi
 
+  if [[ $CMD == titles.modes ]]; then
+    x.list.titles.modes
+    return $?
+  fi
+
+  if [[ $CMD == categories ]]; then
+    x.list.categories
+    return $?
+  fi
+
   if [[ $CMD == emojis ]]; then
     x.list.emojis
     return $?
   fi
 
+  if [[ $CMD =~ ^(twitch.)?id$  ]]; then
+    x.config twitch.id "$@"
+    return $?
+  fi
+
+  if [[ $CMD =~ ^(twitch.)?name$ ]]; then
+    x.config twitch.name "$@"
+    return $?
+  fi
+
+  if [[ $CMD =~ ^twitch.default.category$ ]]; then
+    x.config twitch.default.category "$@"
+    return $?
+  fi
+
+  if [[ $CMD == channel ]]; then
+    x.twitch.channel "$@"
+    return $?
+  fi
+
+  if [[ $CMD == user ]]; then
+    x.twitch.user "$@"
+    return $?
+  fi
+
 }
 
-HELP[main]='
-# Live Streaming Mode and Status Update Utility
+# -------------------------- twitch.channel --------------------------
 
-This bash script helps Twitch live streamers use the command line to
-keep their communities informed about what is happening on their stream in
-real time by communicating the change in status using profiles for their
-current "mode". It can also send notifications using other methods
-(depending on what is detected and supported on the current system):
+HELP[twitch.channel]='
 
-* Twitch Title
-* Twitch Category
-* Twitch Chat Message
-* Twitter Post
-* GitHub Status
+```
+'"$EXE"' twitch.channel
+'"$EXE"' channel
+```
 
-## Dependencies
+Print the Twitch API channel JSON data for the current `twitch.id`.'
 
-Required:
 
-* Bash 4+
-* `curl`
-* `jq`
+x.twitch.channel() {
+  local id 
+  id=$(x.config twitch.id)
+  if [[ -z "$id" ]];then
+    printf "${red}First set twitch.id${reset}\n" >&2
+    return 1
+  fi
+  twitch api get channels -q "broadcaster_id=$id"
+}
 
-Optional:
+# --------------------------- twitch.title ---------------------------
 
-* `pandoc` - for rich help docs
+HELP[twitch.title]='
 
-## Security
+```
+'"$EXE"' twitch.title [NEW]
+```
 
-This script is expected to be installed for a specific user and only
-ever run by that user. No additional security vetting for running as an
-untrusted user has been done.
+Set or get the remote Twitch title for the current `twitch.id`.'
 
-## Legal
 
-Copyright 2021 Rob Muhlestein <rob@rwx.gg>  
-Released under Apache-2.0 License  
-Please mention rwxrob.tv'
+x.twitch.title() {
+  local id json new="$*" resp
+  json=$(x.twitch.channel)
+  if [[ -z "$new" ]]; then
+    jq -r '.data[0].title' <<< "$json"
+    return 0
+  fi
+  id=$(x.config twitch.id)
+  if [[ -z "$id" ]]; then
+    printf "${red}Set twitch.id before updates to Twitch${reset}\n" >&2
+    return 1
+  fi
+  resp=$(twitch api patch channels \
+    -q "broadcaster_id=$id" \
+    -b "{\"title\":\"$new\"}" )
+  if [[ ! $resp =~ 204 ]];then
+    echo "$resp"
+    return 1
+  fi
+}
+
+# -------------------------- twitch.category -------------------------
+
+HELP[twitch.category]='
+
+```
+'"$EXE"' twitch.category [NEW]
+```
+
+Set or get the remote Twitch category (game_id) for the current
+`twitch.id`.'
+
+x.twitch.category() {
+  local id new="$1" resp
+  id=$(x.config twitch.id)
+  if [[ -z "$id" ]]; then
+    printf "${red}Set twitch.id before updates to Twitch${reset}\n" >&2
+    return 1
+  fi
+  if [[ -z "$new" ]];then
+    _twitch.category.get "$id"
+    return $?
+  fi
+  _twitch.category.set "$id" "$new"
+}
+
+_twitch.category.get() {
+  local json id="$1" resp
+  json=$(x.twitch.channel "$id")
+  jq -r '.data[0].game_id' <<< "$json"
+}
+
+_twitch.category.set() {
+  local resp id="$1" new="$2"
+  resp=$(twitch api patch channels \
+    -q "broadcaster_id=$id" \
+    -b "{\"game_id\":\"$new\"}" )
+  if [[ ! $resp =~ 204 ]]; then
+    echo "$resp"
+    return 1
+  fi
+}
+
+# ---------------------------- twitch.tag ----------------------------
+
+x.twitch.tag() {
+  local uuid="$1" json
+  if [[ ! $uuid =~ - ]];then
+    uuid=$(x.tag "$uuid")
+  fi
+  if [[ -z "$uuid" ]]; then
+    printf "${red}Requires a valid Twitch tag UUID${reset}\n" >&2
+    return 1
+  fi
+  json=$(twitch api get /tags/streams -q "tag_id=$uuid")
+  printf "%s%s (%s)\n%s%s%s\n" $white \
+    "$(jq -r ".data[0].localization_names.\"$LOCALE\"" <<< "$json")" \
+    "$(x.tag "$uuid")" \
+    "$black" \
+    "$(jq -r ".data[0].localization_descriptions.\"$LOCALE\"" <<< "$json")" \
+    "$reset\n"
+}
+
+# ---------------------------- twitch.tags ---------------------------
+
+x.twitch.tags() {
+  local id
+  id=$(x.config twitch.id)
+  if [[ -z "$id" ]]; then
+    printf "${red}Set twitch.id before updates to Twitch${reset}\n" >&2
+    return 1
+  fi
+  if [[ -z "$1" ]]; then
+    _twitch.tags.get "$id"
+    return $?
+  fi
+  _twitch.tags.set "$@"
+}
+
+_twitch.tags.get() {
+  local id="$1"
+  mapfile -t tags < <(
+    twitch api get /streams/tags -q "broadcaster_id=$id" | 
+    jq -r '.data[].tag_id'
+  )
+  for (( n=0; n<${#tags[@]}; n++ )); do
+    local name=$(x.tag "${tags[$n]}")
+    [[ -n "$name" ]] && tags[$n]=$name
+  done
+  _join ' ' "${tags[@]}"
+}
+
+_twitch.tags.set() {
+  local resp tag
+  local -a tags
+  if [[ -z "$1" ]];then
+    printf "%s%s%s\n" "${red}" "Requires one or more tags to set" "${reset}" >&2
+    return 1
+  fi
+  for i in "$@";do
+    if [[ $i =~ - ]];then
+      tags+=('"'$i'"')
+      continue
+    fi
+    tag=$(x.tag "$i")
+    if [[ -z "$tag" ]];then
+      printf "%s: %s\n" "${red}Tag UUID not found" "${white}$i${reset}"
+      return 1
+    fi
+    tags+=('"'$(x.tag "$i")'"')
+  done
+  tags=$(_join , ${tags[@]})
+  resp=$(twitch api put /streams/tags \
+    -q "broadcaster_id=$id"  \
+    -b '{"tag_ids":['"$tags"']}' )
+  [[ ! $resp =~ 204 ]] && echo "$resp"
+}
+
+# ------------------------- twitch.tags.clear ------------------------
+
+x.twitch.tags.clear() {
+  local id tag tags
+  id=$(x.config twitch.id)
+  if [[ -z "$id" ]]; then
+    printf "${red}Set twitch.id before updates to Twitch${reset}\n" >&2
+    return 1
+  fi
+  twitch api put /streams/tags -q "broadcaster_id=$id" -b '{"tag_ids":[]}' > /dev/null
+}
+
+# -------------------------- twitch.tags.for -------------------------
+
+x.twitch.tags.for() {
+  local id="$1"
+  if [[ -z "$id" ]]; then
+    printf "${red}Twitch user name or login ID required${reset}\n" >&2
+    return 1
+  fi
+  if [[ $id =~ ^[0-9]+$ ]];then
+    _twitch.tags.get "$id"
+    return $?
+  fi
+  _twitch.tags.get "$(x.twitch.id.for "$id")"
+}
+
+# ---------------------------- twitch.user ---------------------------
+
+HELP[twitch.user]='
+
+```
+'"$EXE"' twitch.user [NAME]
+```
+
+Fetch and print summary for a give Twitch user by name. If no name is
+provided, will display summary for the current `twitch.name`.'
+
+x.twitch.user() {
+  local user="$1" json
+  [[ -z "$user" ]] && user=$(x.config twitch.name)
+  if [[ -z "$user" ]];then
+    printf "${red}Requires user name${reset}\n" >&2
+    return 1
+  fi
+  json=$(twitch api get users -q login="$user")
+  jq -r '.data[0]' <<< "$json"
+}
+
+# --------------------------- twitch.id.for --------------------------
+
+x.twitch.id.for() {
+  local json
+  json=$(x.twitch.user "$@")
+  jq -r '.id' <<< "$json"
+}
 
 # ---------------------------- list.modes ----------------------------
 
-HELP[list.modes]='List available modes.'
+HELP[list.modes]='
+
+```
+'"$EXE"' list.modes
+'"$EXE"' modes
+```
+
+List available modes.'
 
 x.list.modes () {
   local -a modes
   local mode line
   while IFS= read -r line; do
-    if [[ $line =~ ^mode && $line =~ name ]]; then
+    if [[ $line =~ ^mode\..*\.name ]]; then
       line=${line//mode./}
       mode=${line//.name/}
       modes+=($mode)
     fi
-  done < <(x.config keys);
+  done < <(x.config.keys);
   if [[ -t 1 ]]; then
     for mode in $(printf "%s\n" "${modes[@]}" | sort ); do
       echo -en "${colors[((RANDOM%8))]}$mode$reset "
@@ -134,31 +440,53 @@ x.list.modes () {
 HELP[mode]='
 
 ```
-'"$EXE"' [NEW]
+'"$EXE"' mode [NEW]
 ```
 
 Print the current mode name (from local cache) or set to a new one. Note
 that this does not fetch the current remote Twitch status'
 
-x.mode() { x.config current "$@";}
+x.mode() {
+  local new="$*" title category
+  if [[ -z "$new" ]]; then
+    x.config current
+    return $?
+  fi
+  x.config current "$new"
+  #-----------------------------------
+  title=$(x.title)
+  x.twitch.title "$title"
+  # ----------------------------------
+  category=$(x.category)
+  category=${category%% *}
+  [[ $category == null || $category == "" ]] \
+    && category="${CONF[twitch.default.category]}"
+  [[ -n "$category" ]] && x.twitch.category "$category"
+  # ----------------------------------
+  mapfile -d' ' -t tags < <(x.tags)
+  [[ -n "${tags[*]}" ]] && x.twitch.tags "${tags[@]}"
+}
 
 # ------------------------------- emoji ------------------------------
 
 HELP[emoji]='
 
 ```
-'"$EXE"' [NEW]
+'"$EXE"' emoji [NEW]
 ```
 
 Print or change the current mode emoji.'
 
-x.emoji() {
-  local cur="$(x.mode)" new="$1"
+x.emoji() { _emoji "" "$*"; }
+
+_emoji() {
+  local mode="$1" new="$2"
+  [[ -z "$mode" ]] && mode=$(x.mode)
   if [[ -z "$new" ]]; then
-    x.config "mode.$cur.emoji"
+    x.config "mode.$mode.emoji"
     return $?
   fi
-  x.config "mode.$cur.emoji" "$new"
+  x.config "mode.$mode.emoji" "$new"
 }
 
 # ---------------------------- list.titles ---------------------------
@@ -166,37 +494,28 @@ x.emoji() {
 HELP[list.titles]='
 
 ```
-'"$EXE"'
+'"$EXE"' list.titles
+'"$EXE"' titles
 ```
 
 List all titles in alphabetical order by mode name.'
 
 x.list.titles() {
-  local cur="$(x.mode)"
-  for i in $(x.list.modes); do
-    x.mode "$i"
-    printf "%s\n" "$(x.title)"
-  done
-  x.mode "$cur"
+  for i in $(x.list.modes); do _title "$i"; done
 }
 
-# --------------------------- titles.modes ---------------------------
+# ------------------------- list.titles.modes ------------------------
 
-HELP[titles.modes]='
+HELP[list.titles.modes]='
 
 ```
-'"$EXE"'
+'"$EXE"' list.titles.modes
 ```
 
-List all titles in alphabetical order by mode name and show mode.'
+Same as list.titles but also show the mode name.'
 
-x.titles.modes() {
-  local cur="$(x.mode)"
-  for i in $(x.list.modes); do
-    x.mode "$i"
-    printf "%s [%s]\n" "$(x.title)" "$i"
-  done
-  x.mode "$cur"
+x.list.titles.modes() {
+  for i in $(x.list.modes); do _title.mode "$i"; done
 }
 
 # ----------------------- _check_status_length -----------------------
@@ -214,25 +533,29 @@ _check_status_length() {
 HELP[status]='
 
 ```
-'"$EXE"' [NEW]
+'"$EXE"' status [NEW]
 ```
 
-Print or change the current status (overrides status.default for current
-mode).  '
+Print or change the current status. Note this does not change the
+status.default. To remove and return to status.default use
+status.clear.'
 
-x.status() {
-  local  new="$*" cur="$(x.mode)"
+x.status() { _status "" "$*"; }
+
+_status() {
+  local mode="$1" new="$2"
+  [[ -z "$mode" ]] && mode=$(x.mode)
   if [[ -z "$new" ]]; then
-    local status="$(x.config "mode.$cur.status")"
+    local status="$(x.config "mode.$mode.status")"
     if [[ -z "$status" ]]; then
-      x.status.default
+      _status.default "$mode"
       return $?
     fi
     echo "$status"
     return $?
   fi
   _check_status_length "$new"
-  x.config "mode.$cur.status" "$new"
+  x.config "mode.$mode.status" "$new"
 }
 
 # --------------------------- status.clear ---------------------------
@@ -240,14 +563,15 @@ x.status() {
 HELP[status.clear]='
 
 ```
-'"$EXE"'
+'"$EXE"' status.clear
 ```
 
-Clears the current status (switching to status.default).'
+Clears the current status (effectively switching back to status.default)
+.'
 
 x.status.clear() {
   local cur="$(x.mode)"
-  x.config delete "mode.$cur.status"
+  x.config.delete "mode.$cur.status"
 }
 
 # -------------------------- status.default --------------------------
@@ -255,19 +579,22 @@ x.status.clear() {
 HELP[status.default]='
 
 ```
-'"$EXE"' [NEW]
+'"$EXE"' status.default [NEW]
 ```
 
 Print or change the current mode status default. (See status also.)
 '
 
-x.status.default() {
-  local cur="$(x.mode)" new="$*"
+x.status.default() { _status.default "" "$*"; }
+
+_status.default() {
+  local mode="$1" new="$2"
+  [[ -z "$mode" ]] && mode=$(x.mode)
   if [[ -z "$new" ]]; then
-    x.config "mode.$cur.status.default"
+    x.config "mode.$mode.status.default"
     return $?
   fi
-  x.config "mode.$cur.status.default" "$new"
+  x.config "mode.$mode.status.default" "$new"
 }
 
 # ----------------------------- category -----------------------------
@@ -275,29 +602,45 @@ x.status.default() {
 HELP[category]='
 
 ```
-'"$EXE"' [NEW]
+'"$EXE"' category [NEW]
 ```
 
-Print or change the current mode category. Prints both the category ID
-number and the long written form separated by a space. Note that
+Print or change the current mode category (which is still `game_id`
+internally in the Twitch API). Prints both the category ID number and
+the long written form separated by a space. Note that
 changing the category requires the number only and does not immediately
 update the current category on Twitch, only the local entry in the
-configuration data.'
+configuration data. Consider adding popularly used categories to the
+local configuration. See `list.categories`.'
 
-x.category() {
-  local cur="$(x.mode)" new="$*"
+x.category() { _category "" "$*"; }
+
+_category() {
+  local mode="$1" new="$2"
+  [[ -z "$mode" ]] && mode=$(x.mode)
   if [[ -z "$new" ]]; then
-    local id="$(x.config "mode.$cur.category")"
+    local id=$(x.config "mode.$mode.category")
+    [[ $id == null ]] && id=${CONF[twitch.default.category]}
+    if [[ -z "$id" ]]; then
+      printf "%s%s%s\n" "${red}" 'Could not find category' "${reset}" >&2
+      return 1
+    fi
     local long="$(x.config "cat.$id")"
     printf "%s %s\n" "$id" "$long"
     return $?
   fi
-  x.config "mode.$cur.category" "$new"
+  x.config "mode.$mode.category" "$new"
 }
 
 # -------------------------- list.categories -------------------------
 
-HELP[list.categories]='List available categories.'
+HELP[list.categories]='
+
+```
+'"$EXE"' list.categories
+```
+
+List available categories.'
 
 x.list.categories () {
   local -A ids
@@ -308,7 +651,7 @@ x.list.categories () {
       name=$(x.config "cat.$id")
       ids["$name"]=$id
     fi
-  done < <(x.config keys);
+  done < <(x.config.keys);
   while IFS= read -r name; do
     printf "$white%10s$reset $blue%s$reset\n" "${ids[$name]}" "$name"
   done < <(printf "%s\n" "${!ids[@]}" | sort)
@@ -316,7 +659,23 @@ x.list.categories () {
 
 # ----------------------------- list.tags ----------------------------
 
-HELP[list.tags]='List available tags.'
+HELP[list.tags]='
+
+```
+'"$EXE"' list.tags
+```
+
+List available tags. Note that tags (without list) is an entirely
+different command. To add tags to the local configuration cache edit the
+configuration file directly with `config edit` each tag should be in the
+format of the following example:
+
+```
+tag.cozy=adc4a830-07f5-457b-95e5-5ab6cc1f9af3
+```
+
+Note that there cannot be any whitespace anywhere in the line.
+'
 
 x.list.tags () {
   local -a tags
@@ -325,16 +684,64 @@ x.list.tags () {
     if [[ $line =~ ^tag ]]; then
       tags+=(${line##*.})
     fi
-  done < <(x.config keys);
+  done < <(x.config.keys);
   while IFS= read -r tag; do
     echo -ne "${colors[((RANDOM%8))]}$tag$reset "
   done < <(printf "%s\n" "${tags[@]}" | sort)
   echo
 }
 
+# -------------------------------- tag -------------------------------
+
+HELP[tag]='
+
+```
+'"$EXE"' tag (UUID|NAME)
+```
+
+Lookup a tag in the local configuration cache by UUID or short name
+(NAME). See list.tags for how tags are added to the cache.'
+
+
+x.tag() {
+  [[ -z "$1" ]] && 
+    printf "${red}Missing tag UUID or shortname${reset}\n" && return 1
+  if [[ "$1" =~ - ]]; then
+    _tag_by_uuid "$@"
+    return $?
+  fi
+  _tag_by_name "$@"
+}
+
+_tag_by_uuid() {
+  local uuid="$1"
+  while IFS= read -r line; do
+    if [[ $line =~ =$uuid$ ]];then
+      line=${line%%=*}
+      echo "${line#tag.}"
+    fi
+  done < "$(x.config.path)"
+}
+
+_tag_by_name() {
+  local name="$1"
+  while IFS= read -r line; do
+    if [[ $line =~ ^tag.$name= ]];then
+      echo "${line##*=}"
+    fi
+  done < "$(x.config.path)"
+}
+
 # ---------------------------- list.emojis ---------------------------
 
-HELP[list.emojis]='List emojis from all modes'
+HELP[list.emojis]='
+
+```
+'"$EXE"' list.emojis
+'"$EXE"' emojis
+```
+
+List emojis from all modes. See `emoji`.'
 
 x.list.emojis () {
   local line
@@ -342,7 +749,7 @@ x.list.emojis () {
     if [[ $line =~ .emoji= ]]; then
       echo -n "${line##*=}  "
     fi
-  done < "$(x.config path)";
+  done < "$(x.config.path)";
   echo
 }
 
@@ -351,20 +758,23 @@ x.list.emojis () {
 HELP[tags]='
 
 ```
-'"$EXE"' [NEW]
+'"$EXE"' tags [NEW]
 ```
 
-Print or change the current tags list. Note that changing the tags does
-not update the current tags on Twitch, only the local entry in the
-configuration data. Twitch limits tags to five total.'
+Print or change the current Twitch tags list. Twitch limits tags to five
+total. Tags with their Twitch unique identifiers must first be added
+before they will work. See `list.tags`.'
 
-x.tags() {
-  local cur="$(x.mode)" new="$*"
+x.tags() { _tags "" "$*"; }
+
+_tags() {
+  local mode="$1" new="$2"
+  [[ -z "$mode" ]] && mode=$(x.mode)
   if [[ -z "$new" ]]; then
-    x.config "mode.$cur.tags"
+    x.config "mode.$mode.tags"
     return $?
   fi
-  x.config "mode.$cur.tags" "$new"
+  x.config "mode.$mode.tags" "$new"
 }
 
 # ------------------------------- title ------------------------------
@@ -372,20 +782,27 @@ x.tags() {
 HELP[title]='
 
 ```
-'"$EXE"'
+'"$EXE"' title [MODE]
 ```
 
-Print the current emoji, mode, status, and flags on a single line
-suitable for pasting into the Twitch Stream Info > Title field.  The
-commas of the flags will be replaced with bars (|) and wrapped with
-square brackets. Will use either the current status or the
-default.status for the current mode if not set.'
+Print the current emoji and status suitable for setting twitch.title.
+The current status is used if MODE is not passed. This is default
+command when no arguments are passed.'
 
-x.title() {
-  local status=$(x.status)
+x.title() { _title ""; }
+
+_title() {
+  local mode="$1"
+  [[ -z "$mode" ]] && mode=$(x.mode)
   printf "%s %s\n" \
-    "$(x.emoji)" \
-    "$status"
+    "$(_emoji "$mode")" \
+    "$(_status "$mode")"
+}
+
+_title.mode() {
+  local mode="$1"
+  [[ -z "$mode" ]] && mode=$(x.mode)
+  printf "%s [%s]\n" "$(_title "$mode")" "$mode"
 }
 
 # ------------------------------ delete ------------------------------
@@ -393,7 +810,7 @@ x.title() {
 HELP[delete]='
 
 ```
-'"$EXE"' MODE
+'"$EXE"' delete MODE
 ```
 
 Delete all data for a specific. WARNING: Does not ask for confirmation.
@@ -402,18 +819,25 @@ Delete all data for a specific. WARNING: Does not ask for confirmation.
 x.delete() {
   local cur="$1"
   [[ -z "$cur" ]] && echo "Must specify mode to delete" && return 1
-  x.config delete "mode.$cur.emoji"
-  x.config delete "mode.$cur.name"
-  x.config delete "mode.$cur.status"
-  x.config delete "mode.$cur.status.default"
-  x.config delete "mode.$cur.flags"
-  x.config delete "mode.$cur.category"
+  x.config.delete "mode.$cur.emoji"
+  x.config.delete "mode.$cur.name"
+  x.config.delete "mode.$cur.status"
+  x.config.delete "mode.$cur.status.default"
+  x.config.delete "mode.$cur.flags"
+  x.config.delete "mode.$cur.category"
   echo "Deleted $cur"
 }
 
-# -------------------------- utility command -------------------------
+# ------------------------------- usage ------------------------------
 
-HELP[usage]='Displays a summary of usage.'
+HELP[usage]='
+
+```
+'"$EXE"' usage
+```
+
+Display all possible commands. Note that this is usually easier by
+simply using tab completion instead.'
 
 x.usage() {
   local -a cmds
@@ -425,7 +849,7 @@ x.usage() {
   printf "usage: %s (%s)\n" "$EXE" "${cmds[*]}"
 }
 
-# --------------------------- help command ---------------------------
+# ------------------------------- help -------------------------------
 
 HELP[help]='
 
@@ -445,17 +869,19 @@ Also see `readme` and `usage` commands.
 '
 
 x.help() { 
-  local name="${1:-main}" title body
+  local name="${1:-main}" title body file
   title=$(_help_title "$name") || true
   if [[ -z "$title" ]]; then
-    body="${HELP[$name]}"
     title="$EXE $name"
-    [[ $name = main ]] && title="$EXE"
+    [[ $name == main ]] && title="$EXE"
+  fi
+  if [[ $name == main ]]; then
+    body=$(x.readme)
+    body=${body#*$title}
   else
     body="${HELP[$name]}"
-    body=${body#*$title}
   fi
-  local file="/tmp/help-$EXE-$name.html"
+  file="/tmp/help-$EXE-$name.html"
   if _have pandoc ; then
     if _have "$HELP_BROWSER" && [[ -t 1 ]] ;then
       pandoc -f gfm -s --metadata title="$title" \
@@ -480,7 +906,7 @@ _help_title() {
   done <<< "${HELP[$name]}"
 }
 
-# -------------------------- readme command --------------------------
+# ------------------------------ readme ------------------------------
 
 HELP[readme]='
 ## Generate `README.md` File
@@ -505,45 +931,46 @@ x.readme() {
   echo -e "----\n\n*Autogenerated $(date)*\n"
 }
 
-# x.json() { _jsonstr "$@"; }
-# x.urlencode() { _urlencode "$@"; }
-
-
-# -------------------------- config command --------------------------
+# ------------------------------ config ------------------------------
 
 HELP[config]='
 
 ```
 '"$EXE"' config
 '"$EXE"' config KEY
-'"$EXE"' config KEY VALUE
-'"$EXE"' config KEY ""
-'"$EXE"' config keys
-'"$EXE"' config val[ues]
-'"$EXE"' config dir[ectory]
-'"$EXE"' config path [file]
-'"$EXE"' config edit [file]
-'"$EXE"' config del[ete]
+'"$EXE"' config.set KEY VALUE
+'"$EXE"' config.set KEY ""
+'"$EXE"' config.keys
+'"$EXE"' config.values
+'"$EXE"' config.directory
+'"$EXE"' config.path [file]
+'"$EXE"' config.edit [file]
+'"$EXE"' config.delete
+'"$EXE"' config.read
+'"$EXE"' config.write
+'"$EXE"' config.dump
 ```
 
 The `config` command is for reading, writing, and displaying standard
-open desktop configuration properties. Pass an empty string to delete
-a property.
+open desktop configuration properties. 
 
 ### Arguments
 
-With no arguments outputs all the currently cached configuration
-settings.
+With no arguments calls `dump` and outputs all the currently cached
+configuration settings.
 
 With a single KEY argument fetches the value for that key and outputs
 it unless it is one of the following special (reserved) key names:
 
-* `dir*` full path to config directory
-* `path` full path to specific config file (default: `values`) 
-* `edit` opens config file in editor (default: `editor` or `$EDITOR)
-* `keys` output the configuration keys, one per line
-* `val*` output the configuration values, one per line
-* `del*` if key argument then delete a specific key, otherwise prompt
+* `directory` full path to config directory
+* `path`   full path to specific config file (default: `values`) 
+* `edit`   opens config file in editor (default: `editor` or `$EDITOR)
+* `keys`   output the configuration keys, one per line
+* `values` output the configuration values, one per line
+* `delete` if key argument then delete a specific key, otherwise prompt
+* `read` reads the configuration file into CONF associative array
+* `write` write the CONF associative array to the configuration file
+* `dump` write the flattened CONF associative array to standard output
 
 With more than one argument the remaining arguments after the KEY will
 be combined into the VALUE and written to a `values` file in the
@@ -574,46 +1001,38 @@ existing tools (and no `jq` dependency).
 * KEYs may be anything but the equal sign (`=`)
 * VALUEs may be anything but line returns must be escaped
 
-Note that this is *not* the same as Java properties and other similar
-format. It is designed for ultimate simplicity, efficiency, and
-portability.'
+Note that, although similar, this is *not* the same as Java properties
+and other similar format. It is designed for ultimate simplicity,
+efficiency, and portability.'
 
 x.config() {
-  case $1 in 
-    dir*) shift; _config_dir  "$@"; return $? ;;
-    path) shift; _config_path "$@"; return $? ;;
-    edit) shift; _config_edit "$@"; return $? ;;
-    del*) shift; _config_del  "$@"; return $? ;;
-    keys) shift; _config_keys "$@"; return $? ;;
-    val*) shift; _config_vals "$@"; return $? ;;
-  esac
   case $# in
-    0) _config_dump ;;
-    1) _config_get "$@" ;;
-    *) _config_set "$@" ;;
+    0) x.config.dump ;;
+    1) x.config.get "$@" ;;
+    *) x.config.set "$@" ;;
   esac
 }
 
-_config_edit() {
+x.config.edit() {
   : "${CONF[editor]:="${EDITOR:=vi}"}"
-  exec "${CONF[editor]}" "$(_config_path "${1:-values}")"
+  exec "${CONF[editor]}" "$(x.config.path "${1:-values}")"
 }
 
-_config_del() {
+x.config.delete() {
   if [[ -z "$1" ]];then
     select key in "${!CONF[@]}"; do
-      _config_del "$key"
+      x.config.delete "$key"
       return $? 
     done
   fi
-  _config_set "$1" ''
+  x.config.set "$1" ''
 }
 
-_config_keys() { printf "%s\n" "${!CONF[@]}"; }
+x.config.keys() { printf "%s\n" "${!CONF[@]}"; }
 
-_config_vals() { printf "%s\n" "${CONF[@]}"; }
+x.config.values() { printf "%s\n" "${CONF[@]}"; }
 
-_config_dir() {
+x.config.dir() {
   local dir="$HOME/.config/$EXE"
   [[ -n "$XDG_CONFIG_HOME" ]] && dir="$XDG_CONFIG_HOME/$EXE" 
   [[ -n "$CONFIG_DIR" ]] && dir="$CONFIG_DIR"
@@ -623,28 +1042,28 @@ _config_dir() {
   return 0
 }
 
-_config_path() { 
+x.config.path() { 
   local file=${1:-values}
-  printf "%s/%s" "$(_config_dir)" "$file"
+  printf "%s/%s" "$(x.config.dir)" "$file"
   [[ -t 1 ]] && echo
   return 0
 }
 
-_config_set() {
+x.config.set() {
   local key="$1"; shift; local val="$*"
   val="${val//$'\n'/\\n}"
   CONF["$key"]="$val"
-  _config_write
+  x.config.write
 }
 
-_config_get() { 
+x.config.get() { 
   printf "%s" "${CONF[$1]}"
   [[ -t 1 ]] && echo
   return 0
 }
 
-_config_read() {
-  local values="$(_config_path)"
+x.config.read() {
+  local values="$(x.config.path)"
   [[ -r "$values" ]] || return 0
   while IFS= read -r line; do
     [[ $line =~ ^([^=]+)=(.+)$ ]] || continue
@@ -652,13 +1071,13 @@ _config_read() {
   done < "$values"
 }
 
-_config_write() {
-  local dir="$(_config_dir)"
+x.config.write() {
+  local dir="$(x.config.dir)"
   mkdir -p "$dir"
-  _config_dump > "$dir/values"
+  x.config.dump > "$dir/values"
 }
 
-_config_dump() {
+x.config.dump() {
   (( ${#CONF[@]} == 0 )) && return 0
   paste -d=\
     <(printf "%s\n" "${!CONF[@]}") \
@@ -709,6 +1128,8 @@ _trim() {
   echo -e "${it%"${it##*[![:space:]]}"}"
 }
 
+_join() { local IFS="$1"; shift; echo "$*"; }
+
 _have(){ type "$1" &>/dev/null; }
 
 _checkdep() {
@@ -732,7 +1153,7 @@ _buffer() {
 # --------------------- completion and delegation --------------------
 #      `complete -C foo foo` > `source <(foo bloated_completion)`
 
-_config_read
+x.config.read
 _have _initialize && _initialize "$@"
 
 while IFS= read -r line; do
