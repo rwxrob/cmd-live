@@ -118,8 +118,10 @@ _alternatives() {
   local modecmds=$(x.list.modes)
   modecmds=${modecmds// /|}
   if [[ $CMD =~ ^$modecmds$ ]]; then
-    x.mode "$CMD"
-    x.title
+    x.mode "$CMD" "$@"
+    x.twitch.title
+    x.list.categories | grep $(x.twitch.category) | sed -r 's/ +//'
+    x.twitch.tags
     return $?
   fi
 
@@ -238,10 +240,12 @@ HELP[twitch.category]='
 ```
 
 Set or get the remote Twitch category (game_id) for the current
-`twitch.id`.'
+`twitch.id`. The special SAME category will skip any attempt to update
+the current Twitch category. This is useful for break modes and such.'
 
 x.twitch.category() {
   local id new="$1" resp
+  [[ new == "SAME" ]] && return 1
   id=$(x.config twitch.id)
   if [[ -z "$id" ]]; then
     printf "${red}Set twitch.id before updates to Twitch${reset}\n" >&2
@@ -288,7 +292,7 @@ x.twitch.tag() {
     "$(x.tag "$uuid")" \
     "$black" \
     "$(jq -r ".data[0].localization_descriptions.\"$LOCALE\"" <<< "$json")" \
-    "$reset\n"
+    "$reset"
 }
 
 # ---------------------------- twitch.tags ---------------------------
@@ -452,13 +456,18 @@ happens, but it is inconsequential since usually a new mode is wanted
 anyway.'
 
 x.mode() {
-  local new="$*" title category
+  local new="$1" category title
+  shift
+  local status="$*"
   if [[ -z "$new" ]]; then
     x.config current
     return $?
   fi
   x.config current "$new"
   #-----------------------------------
+  if [[ -n "$status" ]]; then
+    x.status "$status"
+  fi
   title=$(x.title)
   x.twitch.title "$title"
   # ----------------------------------
@@ -469,7 +478,9 @@ x.mode() {
   [[ -n "$category" ]] && x.twitch.category "$category"
   # ----------------------------------
   mapfile -d' ' -t tags < <(x.tags)
-  [[ -n "${tags[*]}" ]] && x.twitch.tags "${tags[@]}"
+  if [[ -n "${tags[*]}" ]]; then
+    x.twitch.tags "${tags[@]}" || true
+  fi
 }
 
 # ------------------------------- emoji ------------------------------
@@ -625,9 +636,9 @@ _category() {
   [[ -z "$mode" ]] && mode=$(x.mode)
   if [[ -z "$new" ]]; then
     local id=$(x.config "mode.$mode.category")
-    [[ $id == null ]] && id=${CONF[twitch.default.category]}
+    [[ -z "$id" ]] && id=${CONF[twitch.default.category]}
     if [[ -z "$id" ]]; then
-      printf "%s%s%s\n" "${red}" 'Could not find category' "${reset}" >&2
+      printf "%s%s%s\n" "${red}" 'Could not determine category' "${reset}" >&2
       return 1
     fi
     local long="$(x.config "cat.$id")"
