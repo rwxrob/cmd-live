@@ -808,6 +808,8 @@ command when no arguments are passed.'
 
 x.title() { _title ""; }
 
+x.title.mode() { _title.mode ""; }
+
 _title() {
   local mode="$1"
   [[ -z "$mode" ]] && mode=$(x.mode)
@@ -862,7 +864,7 @@ x.create() {
   local valid_tags=$(_trim "$(x.list.tags)")
   valid_tags=${valid_tags// /|}
   while [[ ! $resp =~ ^[yY] ]]; do
-    name=$(_prompt name "$name" "^[a-z]{3,10}$")
+    name=$(_prompt name "$name" "^[a-z.]{3,}$")
     echo "These emojis are already being used:"
     x.list.emojis
     emoji=$(_prompt emoji "$emoji" "[^\ ]")
