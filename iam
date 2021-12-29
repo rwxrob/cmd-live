@@ -695,14 +695,15 @@ Note that there cannot be any whitespace anywhere in the line.
 
 x.list.tags () {
   local -a tags
-  local line tag
+  local line tag c x
   while IFS= read -r line; do
     if [[ $line =~ ^tag ]]; then
       tags+=(${line##*.})
     fi
   done < <(x.config.keys);
   while IFS= read -r tag; do
-    echo -ne "${colors[((RANDOM%8))]}$tag$reset "
+    [[ -t 1 ]] && c="${colors[((RANDOM%8))]}" && x="$reset"
+    echo -ne "$c$tag$x "
   done < <(printf "%s\n" "${tags[@]}" | sort)
   echo
 }
@@ -839,9 +840,50 @@ x.delete() {
   x.config.delete "mode.$cur.name"
   x.config.delete "mode.$cur.status"
   x.config.delete "mode.$cur.status.default"
-  x.config.delete "mode.$cur.flags"
   x.config.delete "mode.$cur.category"
+  x.config.delete "mode.$cur.tags"
   echo "Deleted $cur"
+}
+
+# ------------------------------ create ------------------------------
+
+HELP[create]='
+
+```
+'"$EXE"' create MODE
+```
+
+Create a new mode with interactive prompt. Note that modes can also be
+created directly by simply adding the lines to the `iam config path`
+values file.  '
+
+x.create() {
+  local name emoji default category tags resp
+  local valid_tags=$(_trim "$(x.list.tags)")
+  valid_tags=${valid_tags// /|}
+  while [[ ! $resp =~ ^[yY] ]]; do
+    name=$(_prompt name "$name" "^[a-z]{3,10}$")
+    echo "These emojis are already being used:"
+    x.list.emojis
+    emoji=$(_prompt emoji "$emoji" "[^\ ]")
+    default=$(_prompt default "$default" "[^\ ]")
+    x.list.categories
+    category=$(_prompt category "$category" "^[0-9]{4,}$")
+    x.list.tags
+    tags=$(_prompt tags "$tags" "^$valid_tags$")
+    resp=$(_prompt resp "$resp" "^[nNyY]$" "Does this look correct?
+  name:     $name
+  emoji:    $emoji
+  default:  $default
+  category: $category
+  tags:     $tags
+[N/y]:  ")
+  done
+  x.config "mode.$name.emoji" "$emoji"
+  x.config "mode.$name.name" "$name"
+  x.config "mode.$name.status.default" "$default"
+  x.config "mode.$name.category" "$category"
+  x.config "mode.$name.tags" "$tags"
 }
 
 # ------------------------------- usage ------------------------------
@@ -1164,6 +1206,23 @@ _filter(){
 _buffer() {
   [[ -n "$1" ]] && return 1
   "${FUNCNAME[1]}" "$(</dev/stdin)"
+}
+
+_prompt() {
+  local key="$1" def="$2" regx="$3" value first=yes
+  shift 3
+  local text="${*:-Enter value for %s [%s]: }"
+  [[ -z "$key" ]] && echo "Missing prompt key" >&2 && return 1
+  [[ -z "$regx" ]] && echo "Missing valid regx" >&2 && return 1
+  while [[ ! $value =~ $regx ]];do
+    printf "$text" "$key" "$def" >&2
+    IFS= read -r value
+    [[ -z "$value" ]] && value="$def"
+    [[ $value =~ ^\ +$ ]] && value=""
+    [[ -n "$first" ]] && unset first && continue
+    echo "Must match /$regx/" >&2
+  done
+  _trim "$value"
 }
 
 # --------------------- completion and delegation --------------------
