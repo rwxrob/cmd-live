@@ -457,7 +457,7 @@ anyway.'
 
 x.mode() {
   local new="$1" category title
-  shift
+  shift || true
   local status="$*"
   if [[ -z "$new" ]]; then
     x.config current
@@ -667,7 +667,7 @@ the long written form separated by a space. Note that
 changing the category requires the number only and does not immediately
 update the current category on Twitch, only the local entry in the
 configuration data. Consider adding popularly used categories to the
-local configuration. See `list.categories`.'
+local configuration. See `list.categories` and `category.select`.'
 
 x.category() { _category "" "$*"; }
 
@@ -686,6 +686,38 @@ _category() {
     return $?
   fi
   x.config "mode.$mode.category" "$new"
+}
+
+# -------------------------- category.select -------------------------
+
+HELP[category.select]='
+
+```
+'"$EXE"' category.select
+```
+
+Change the current mode category (which is still `game_id` internally in
+the Twitch API) by selecting from a menu containing all categories
+loaded into the local configuration cache values file (see `config path`
+for more).  Note that this does not update the current category on
+  Twitch, only the local entry in the configuration data.  See
+  `list.categories` and `category`.'
+
+
+x.category.select() {
+  x.category $(_category.select)
+}
+
+_category.select() {
+  local -A categories
+  for id in ${!CONF[@]}; do
+    [[ $id =~ ^cat. ]] || continue
+    categories["${CONF[$id]}"]=${id#*.}
+  done
+  select i in "${!categories[@]}"; do
+    echo "${categories[$i]}"
+    break
+  done
 }
 
 # -------------------------- list.categories -------------------------
