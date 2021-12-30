@@ -505,6 +505,28 @@ _emoji() {
   x.config "mode.$mode.emoji" "$new"
 }
 
+# ---------------------------- description ---------------------------
+
+HELP[description]='
+
+```
+'"$EXE"' description [NEW]
+```
+
+Print or change the current mode description.'
+
+x.description() { _description "" "$*"; }
+
+_description() {
+  local mode="$1" new="$2"
+  [[ -z "$mode" ]] && mode=$(x.mode)
+  if [[ -z "$new" ]]; then
+    x.config "mode.$mode.description"
+    return $?
+  fi
+  x.config "mode.$mode.description" "$new"
+}
+
 # ---------------------------- list.titles ---------------------------
 
 HELP[list.titles]='
@@ -532,6 +554,24 @@ Same as list.titles but also show the mode name.'
 
 x.list.titles.modes() {
   for i in $(x.list.modes); do _title.mode "$i"; done
+}
+
+# ------------------------------- about ------------------------------
+
+HELP[about]='
+
+```
+'"$EXE"' about
+```
+
+Prints Markdown output suitable for pasting into an About text pane.
+Also sends to `xclip` if it is detected on the system.'
+
+x.about() {
+  for i in $(x.list.modes); do 
+    printf "%s **%s**  %s\n" \
+      "$(_emoji "$i")" "$(_status.default "$i")" "$(_description "$i")"
+  done
 }
 
 # ----------------------- _check_status_length -----------------------
@@ -860,7 +900,7 @@ created directly by simply adding the lines to the `iam config path`
 values file.  '
 
 x.create() {
-  local name emoji default category tags resp
+  local name emoji default category tags resp description
   local valid_tags=$(_trim "$(x.list.tags)")
   valid_tags=${valid_tags// /|}
   while [[ ! $resp =~ ^[yY] ]]; do
@@ -873,12 +913,15 @@ x.create() {
     category=$(_prompt category "$category" "^[0-9]{4,}$")
     x.list.tags
     tags=$(_prompt tags "$tags" "^$valid_tags$")
+    description=$(_prompt description "$description" "[^\ ]")
     resp=$(_prompt resp "$resp" "^[nNyY]$" "Does this look correct?
   name:     $name
   emoji:    $emoji
   default:  $default
   category: $category
   tags:     $tags
+  description:
+$description
 [N/y]:  ")
   done
   x.config "mode.$name.emoji" "$emoji"
@@ -886,6 +929,7 @@ x.create() {
   x.config "mode.$name.status.default" "$default"
   x.config "mode.$name.category" "$category"
   x.config "mode.$name.tags" "$tags"
+  x.config "mode.$name.description" "$description"
 }
 
 # ------------------------------- usage ------------------------------
