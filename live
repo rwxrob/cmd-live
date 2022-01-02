@@ -19,11 +19,11 @@ declare -A CONF
 # -------------------------- main help text --------------------------
 
 HELP[main]='
-# Twitch Streamer Mode Update Utility
+# Live Streamer Command Line Utility
 
-This bash script helps Twitch live streamers communicate the current
-state of their stream quickly from the Linux command line by creating
-and changing a number of streaming *modes* which are stored in a simple
+This bash script helps live streamers communicate the current state of
+their stream quickly from the Linux command line by creating and
+changing a number of streaming *modes* which are stored in a simple
 configuration file. Streamers can also optionally post a corresponding
 Twitch chat message, GitHub status, and/or Twitter update. This script
 can also be used to post markers in the current live stream to help with
@@ -928,8 +928,8 @@ HELP[create]='
 ```
 
 Create a new mode with interactive prompt. Note that modes can also be
-created directly by simply adding the lines to the `iam config path`
-values file.  '
+created directly by simply adding the lines to the `'"$EXE"' config
+path` values file.  '
 
 x.create() {
   local name emoji default category tags resp description

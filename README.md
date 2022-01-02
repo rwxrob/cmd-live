@@ -1,8 +1,8 @@
-# Twitch Streamer Mode Update Utility
+# Live Streamer Command Line Utility
 
-This bash script helps Twitch live streamers communicate the current
-state of their stream quickly from the Linux command line by creating
-and changing a number of streaming *modes* which are stored in a simple
+This bash script helps live streamers communicate the current state of
+their stream quickly from the Linux command line by creating and
+changing a number of streaming *modes* which are stored in a simple
 configuration file. Streamers can also optionally post a corresponding
 Twitch chat message, GitHub status, and/or Twitter update. This script
 can also be used to post markers in the current live stream to help with
@@ -59,7 +59,7 @@ Please mention rwxrob.tv for attribution
 ## The `about` Command
 
 ```
-iam about
+live about
 ```
 
 Prints Markdown output suitable for pasting into an About text pane.
@@ -68,7 +68,7 @@ Also sends to `xclip` if it is detected on the system.
 ## The `category` Command
 
 ```
-iam category [NEW]
+live category [NEW]
 ```
 
 Print or change the current mode category (which is still `game_id`
@@ -82,7 +82,7 @@ local configuration. See `list.categories` and `category.select`.
 ## The `category.select` Command
 
 ```
-iam category.select
+live category.select
 ```
 
 Change the current mode category (which is still `game_id` internally in
@@ -95,19 +95,19 @@ for more).  Note that this does not update the current category on
 ## The `config` Command
 
 ```
-iam config
-iam config KEY
-iam config.set KEY VALUE
-iam config.set KEY ""
-iam config.keys
-iam config.values
-iam config.directory
-iam config.path [file]
-iam config.edit [file]
-iam config.delete
-iam config.read
-iam config.write
-iam config.dump
+live config
+live config KEY
+live config.set KEY VALUE
+live config.set KEY ""
+live config.keys
+live config.values
+live config.directory
+live config.path [file]
+live config.edit [file]
+live config.delete
+live config.read
+live config.write
+live config.dump
 ```
 
 The `config` command is for reading, writing, and displaying standard
@@ -140,7 +140,7 @@ configuration directory.
 The configuration directory path relies on the following environment
 variables:
 
-* `EXE` - defaults to name of currently running command (iam)
+* `EXE` - defaults to name of currently running command (live)
 * `HOME` - checked for `$HOME/.config/$EXE/values`
 * `XDG_CONFIG_HOME` - overrides `$HOME/.config`
 * `CONFIG_DIR` - full path to directory containing `values` file
@@ -152,7 +152,7 @@ first time a value is set.
 ### Configuration `values` File Format
 
 The file (which is almost always located at
-`~/.config/iam/values`) uses the simplest possible format to
+`~/.config/live/values`) uses the simplest possible format to
 facilitate standard UNIX parsing and filtering with any number of
 existing tools (and no `jq` dependency).
 
@@ -167,17 +167,17 @@ efficiency, and portability.
 ## The `create` Command
 
 ```
-iam create MODE
+live create MODE
 ```
 
 Create a new mode with interactive prompt. Note that modes can also be
-created directly by simply adding the lines to the `iam config path`
-values file.
+created directly by simply adding the lines to the `live config
+path` values file.
 
 ## The `delete` Command
 
 ```
-iam delete MODE
+live delete MODE
 ```
 
 Delete all data for a specific. WARNING: Does not ask for confirmation.
@@ -185,7 +185,7 @@ Delete all data for a specific. WARNING: Does not ask for confirmation.
 ## The `description` Command
 
 ```
-iam description [NEW]
+live description [NEW]
 ```
 
 Print or change the current mode description.
@@ -193,7 +193,7 @@ Print or change the current mode description.
 ## The `emoji` Command
 
 ```
-iam emoji [NEW]
+live emoji [NEW]
 ```
 
 Print or change the current mode emoji.
@@ -201,8 +201,8 @@ Print or change the current mode emoji.
 ## The `emojis` Command
 
 ```
-iam list.emojis
-iam emojis
+live list.emojis
+live emojis
 ```
 
 List emojis from all modes. See `emoji`.
@@ -210,7 +210,7 @@ List emojis from all modes. See `emoji`.
 ## The `help` Command
 
 ```
-iam help [COMMAND]
+live help [COMMAND]
 ```
 
 Displays specific help information. If no argument is passed displays
@@ -226,7 +226,7 @@ Also see `readme` and `usage` commands.
 ## The `list.categories` Command
 
 ```
-iam list.categories
+live list.categories
 ```
 
 List available categories.
@@ -234,8 +234,8 @@ List available categories.
 ## The `list.emojis` Command
 
 ```
-iam list.emojis
-iam emojis
+live list.emojis
+live emojis
 ```
 
 List emojis from all modes. See `emoji`.
@@ -243,8 +243,8 @@ List emojis from all modes. See `emoji`.
 ## The `list.modes` Command
 
 ```
-iam list.modes
-iam modes
+live list.modes
+live modes
 ```
 
 List available modes.
@@ -252,7 +252,7 @@ List available modes.
 ## The `list.tags` Command
 
 ```
-iam list.tags
+live list.tags
 ```
 
 List available tags. Note that tags (without list) is an entirely
@@ -269,8 +269,8 @@ Note that there cannot be any whitespace anywhere in the line.
 ## The `list.titles` Command
 
 ```
-iam list.titles
-iam titles
+live list.titles
+live titles
 ```
 
 List all titles in alphabetical order by mode name.
@@ -278,7 +278,7 @@ List all titles in alphabetical order by mode name.
 ## The `list.titles.modes` Command
 
 ```
-iam list.titles.modes
+live list.titles.modes
 ```
 
 Same as list.titles but also show the mode name.
@@ -286,7 +286,7 @@ Same as list.titles but also show the mode name.
 ## The `mode` Command
 
 ```
-iam mode [NEW]
+live mode [NEW]
 ```
 
 Print the current mode name (from local cache) or set to a new one and
@@ -300,8 +300,8 @@ anyway.
 ## The `modes` Command
 
 ```
-iam list.modes
-iam modes
+live list.modes
+live modes
 ```
 
 List available modes.
@@ -309,7 +309,7 @@ List available modes.
 ## Generate `README.md` File
 
 ```
-iam readme > README.md
+live readme > README.md
 ```
 
 The `readme` command will output the embedded help documentation in raw
@@ -319,7 +319,7 @@ GitHub or similar hosting service.
 ## The `status` Command
 
 ```
-iam status [NEW]
+live status [NEW]
 ```
 
 Print or change the current status. Note this does not change the
@@ -329,7 +329,7 @@ status.clear.
 ## The `status.clear` Command
 
 ```
-iam status.clear
+live status.clear
 ```
 
 Clears the current status (effectively switching back to status.default)
@@ -338,7 +338,7 @@ Clears the current status (effectively switching back to status.default)
 ## The `status.default` Command
 
 ```
-iam status.default [NEW]
+live status.default [NEW]
 ```
 
 Print or change the current mode status default. (See status also.)
@@ -346,7 +346,7 @@ Print or change the current mode status default. (See status also.)
 ## The `tag` Command
 
 ```
-iam tag (UUID|NAME)
+live tag (UUID|NAME)
 ```
 
 Lookup a tag in the local configuration cache by UUID or short name
@@ -355,7 +355,7 @@ Lookup a tag in the local configuration cache by UUID or short name
 ## The `tags` Command
 
 ```
-iam tags [NEW]
+live tags [NEW]
 ```
 
 Print or change the current Twitch tags list. Twitch limits tags to five
@@ -365,7 +365,7 @@ before they will work. See `list.tags`.
 ## The `title` Command
 
 ```
-iam title [MODE]
+live title [MODE]
 ```
 
 Print the current emoji and status suitable for setting twitch.title.
@@ -375,8 +375,8 @@ command when no arguments are passed.
 ## The `titles` Command
 
 ```
-iam list.titles
-iam titles
+live list.titles
+live titles
 ```
 
 List all titles in alphabetical order by mode name.
@@ -384,7 +384,7 @@ List all titles in alphabetical order by mode name.
 ## The `twitch.category` Command
 
 ```
-iam twitch.category [NEW]
+live twitch.category [NEW]
 ```
 
 Set or get the remote Twitch category (game_id) for the current
@@ -394,8 +394,8 @@ the current Twitch category. This is useful for break modes and such.
 ## The `twitch.channel` Command
 
 ```
-iam twitch.channel
-iam channel
+live twitch.channel
+live channel
 ```
 
 Print the Twitch API channel JSON data for the current `twitch.id`.
@@ -403,7 +403,7 @@ Print the Twitch API channel JSON data for the current `twitch.id`.
 ## The `twitch.title` Command
 
 ```
-iam twitch.title [NEW]
+live twitch.title [NEW]
 ```
 
 Set or get the remote Twitch title for the current `twitch.id`.
@@ -411,7 +411,7 @@ Set or get the remote Twitch title for the current `twitch.id`.
 ## The `twitch.user` Command
 
 ```
-iam twitch.user [NAME]
+live twitch.user [NAME]
 ```
 
 Fetch and print summary for a give Twitch user by name. If no name is
@@ -420,7 +420,7 @@ provided, will display summary for the current `twitch.name`.
 ## The `usage` Command
 
 ```
-iam usage
+live usage
 ```
 
 Display all possible commands. Note that this is usually easier by
@@ -428,5 +428,5 @@ simply using tab completion instead.
 
 ----
 
-*Autogenerated Thu Dec 30 06:09:27 PM EST 2021*
+*Autogenerated Sun Jan  2 05:49:56 PM EST 2022*
 
