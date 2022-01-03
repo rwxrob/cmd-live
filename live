@@ -470,6 +470,7 @@ x.mode() {
   fi
   title=$(x.title)
   x.twitch.title "$title"
+  _have xclip && xclip <<< "$title"
   # ----------------------------------
   category=$(x.category)
   category=${category%% *}
