@@ -63,6 +63,17 @@ a notification). Twitch allows 140 but keeping a status to 40
 characters or less will allow it to be fully seen from a phone more
 easily. The more direct the status message the better.
 
+**Description** is a long description of the mode intended to give the
+community a good idea of what is allowed and where your attention will
+be during that live streaming state. Include details like whether you
+will have music or mic or video and how often (if ever) you will be
+responding to chat. Let your community know they can get crazy with
+emotes or if they should refrain and stay focused since the chat is
+being used as an interactive communication forum instead of a stadium
+during a concert. The hard-coded max length for any description is 800
+characters (keep in mind that Unicode code points are often more than
+one byte long).
+
 ## Installation
 
 Just put the script someplace in your PATH and add completion to your
