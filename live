@@ -21,6 +21,8 @@ declare -A CONF
 HELP[main]='
 # Live Streamer Command Line Utility
 
+*Once was called `iam` instead of `live` (`alias iam=live` if needed).*
+
 This bash script helps live streamers communicate the current state of
 their stream quickly from the Linux command line by creating and
 changing a number of streaming *modes* which are stored in a simple
