@@ -52,6 +52,17 @@ contain dots (.) to separate modes into submodes easily (`playing.dota2`,
 `out.watching.movie`). This makes for quick and organized tab completion
 later.
 
+**Default Status** is the status used when nothing specific or current
+has been set. This is good when creating an About page summary of your
+different modes. Different services have different limits on the length
+of a status message. You can set this limit with `config maxstatus`
+(which is 80 by default). GitHub, for example, is 80. GitHub README.md
+titles have to be 50 or less or else they will wrap. Twitter, of course,
+has raised their limit to over 200 characters (but no one wants that for
+a notification). Twitch allows 140 but keeping a status to 40
+characters or less will allow it to be fully seen from a phone more
+easily. The more direct the status message the better.
+
 ## Installation
 
 Just put the script someplace in your PATH and add completion to your
@@ -113,7 +124,7 @@ declare -a colors=($black $red $green $yellow $blue $magenta $cyan $white)
 _initialize() {
   : "${CONF[current]:=away}"
   : "${CONF[twitch.default.category]:=509670}"
-  : "${CONF[maxstatus]:=32}"
+  : "${CONF[maxstatus]:=80}"
   COMMANDS+=($(x.list.modes))
   COMMANDS+=(name names modes emojis titles titles.modes 
     categories id name channel user twitch.id twitch.name
@@ -796,6 +807,27 @@ x.list.tags () {
     echo -ne "$c$tag$x "
   done < <(printf "%s\n" "${tags[@]}" | sort)
   echo
+}
+
+# ----------------------------- tags.json ----------------------------
+
+HELP[tags.json]='
+
+```
+'"$EXE"' tags.json
+```
+
+List tag uuids in JSON format for the current mode.'
+
+x.tags.json() {
+  local -a tags uuids
+  local buf
+  mapfile -t -d ' ' tags < <(x.tags)
+  for tag in "${tags[@]}"; do
+    uuids+=($(x.tag "$tag"))
+  done
+  buf=$(printf '"%s",\n' "${uuids[@]}")
+  echo "${buf%,}"
 }
 
 # -------------------------------- tag -------------------------------
